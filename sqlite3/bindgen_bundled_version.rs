@@ -23,10 +23,10 @@ extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 
-pub const SQLITE_VERSION: &[u8; 7] = b"3.47.0\0";
-pub const SQLITE_VERSION_NUMBER: i32 = 3047000;
+pub const SQLITE_VERSION: &[u8; 7] = b"3.47.2\0";
+pub const SQLITE_VERSION_NUMBER: i32 = 3047002;
 pub const SQLITE_SOURCE_ID: &[u8; 85] =
-    b"2024-10-21 16:30:22 03a9703e27c44437c39363d0baf82db4ebc94538a0f28411c85dda156f82636e\0";
+    b"2024-12-07 20:39:59 2aabe05e2e8cae4847a802ee2daddc1d7413d8fc560254d93ee3e72c14685b6c\0";
 pub const SQLITE_OK: i32 = 0;
 pub const SQLITE_ERROR: i32 = 1;
 pub const SQLITE_INTERNAL: i32 = 2;
@@ -173,6 +173,7 @@ pub const SQLITE_IOCAP_UNDELETABLE_WHEN_OPEN: i32 = 2048;
 pub const SQLITE_IOCAP_POWERSAFE_OVERWRITE: i32 = 4096;
 pub const SQLITE_IOCAP_IMMUTABLE: i32 = 8192;
 pub const SQLITE_IOCAP_BATCH_ATOMIC: i32 = 16384;
+pub const SQLITE_IOCAP_SUBPAGE_READ: i32 = 32768;
 pub const SQLITE_LOCK_NONE: i32 = 0;
 pub const SQLITE_LOCK_SHARED: i32 = 1;
 pub const SQLITE_LOCK_RESERVED: i32 = 2;
