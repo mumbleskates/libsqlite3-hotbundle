@@ -29,21 +29,19 @@ wasm32-wasi-vfs = []
 
 bundled = ["__ignore"]
 bundled-windows = ["__ignore"]
-in_gecko = ["__ignore"]
+min_sqlite_version_3_14_0 = ["__ignore"]
 __ignore = []
 
 bundled-sqlcipher = ["__unsupported"]
 bundled-sqlcipher-vendored-openssl = ["__unsupported"]
 sqlcipher = ["__unsupported"]
+in_gecko = ["__unsupported"]
 __unsupported = []
-
-[dependencies]
-openssl-sys = { version = "0.9.103", optional = true }
 
 [build-dependencies]
 bindgen = { version = "0.70", optional = true, default-features = false, features = ["runtime"] }
 pkg-config = { version = "0.3.19", optional = true }
-cc = { version = "1.1.6", optional = true }
+cc = { version = "1.1.6" }
 vcpkg = { version = "0.2.15", optional = true }
 # for loadable_extension:
 prettyplease = {version = "0.2.20", optional = true }

@@ -324,7 +324,7 @@ impl From<HeaderLocation> for String {
 
 mod build_linked {
     #[cfg(feature = "vcpkg")]
-    extern crate vcpkg;
+    use vcpkg;
 
     use super::{bindings, env_prefix, is_compiler, lib_name, win_target, HeaderLocation};
     use std::env;
