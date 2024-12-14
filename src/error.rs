@@ -1,487 +1,343 @@
-use crate::types::FromSqlError;
-use crate::types::Type;
-use crate::{errmsg_to_string, ffi, Result};
 use std::error;
 use std::fmt;
 use std::os::raw::c_int;
-use std::path::PathBuf;
-use std::str;
 
-/// Enum listing possible errors from rusqlite.
-#[derive(Debug)]
+/// Error Codes
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum Error {
-    /// An error from an underlying SQLite call.
-    SqliteFailure(ffi::Error, Option<String>),
-
-    /// Error reported when attempting to open a connection when SQLite was
-    /// configured to allow single-threaded use only.
-    SqliteSingleThreadedMode,
-
-    /// Error when the value of a particular column is requested, but it cannot
-    /// be converted to the requested Rust type.
-    FromSqlConversionFailure(usize, Type, Box<dyn error::Error + Send + Sync + 'static>),
-
-    /// Error when SQLite gives us an integral value outside the range of the
-    /// requested type (e.g., trying to get the value 1000 into a `u8`).
-    /// The associated `usize` is the column index,
-    /// and the associated `i64` is the value returned by SQLite.
-    IntegralValueOutOfRange(usize, i64),
-
-    /// Error converting a string to UTF-8.
-    Utf8Error(str::Utf8Error),
-
-    /// Error converting a string to a C-compatible string because it contained
-    /// an embedded nul.
-    NulError(std::ffi::NulError),
-
-    /// Error when using SQL named parameters and passing a parameter name not
-    /// present in the SQL.
-    InvalidParameterName(String),
-
-    /// Error converting a file path to a string.
-    InvalidPath(PathBuf),
-
-    /// Error returned when an [`execute`](crate::Connection::execute) call
-    /// returns rows.
-    ExecuteReturnedResults,
-
-    /// Error when a query that was expected to return at least one row (e.g.,
-    /// for [`query_row`](crate::Connection::query_row)) did not return any.
-    QueryReturnedNoRows,
-
-    /// Error when the value of a particular column is requested, but the index
-    /// is out of range for the statement.
-    InvalidColumnIndex(usize),
-
-    /// Error when the value of a named column is requested, but no column
-    /// matches the name for the statement.
-    InvalidColumnName(String),
-
-    /// Error when the value of a particular column is requested, but the type
-    /// of the result in that column cannot be converted to the requested
-    /// Rust type.
-    InvalidColumnType(usize, String, Type),
-
-    /// Error when a query that was expected to insert one row did not insert
-    /// any or insert many.
-    StatementChangedRows(usize),
-
-    /// Error returned by
-    /// [`functions::Context::get`](crate::functions::Context::get) when the
-    /// function argument cannot be converted to the requested type.
-    #[cfg(feature = "functions")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "functions")))]
-    InvalidFunctionParameterType(usize, Type),
-    /// Error returned by [`vtab::Values::get`](crate::vtab::Values::get) when
-    /// the filter argument cannot be converted to the requested type.
-    #[cfg(feature = "vtab")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "vtab")))]
-    InvalidFilterParameterType(usize, Type),
-
-    /// An error case available for implementors of custom user functions (e.g.,
-    /// [`create_scalar_function`](crate::Connection::create_scalar_function)).
-    #[cfg(feature = "functions")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "functions")))]
-    UserFunctionError(Box<dyn error::Error + Send + Sync + 'static>),
-
-    /// Error available for the implementors of the
-    /// [`ToSql`](crate::types::ToSql) trait.
-    ToSqlConversionFailure(Box<dyn error::Error + Send + Sync + 'static>),
-
-    /// Error when the SQL is not a `SELECT`, is not read-only.
-    InvalidQuery,
-
-    /// An error case available for implementors of custom modules (e.g.,
-    /// [`create_module`](crate::Connection::create_module)).
-    #[cfg(feature = "vtab")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "vtab")))]
-    ModuleError(String),
-
-    /// An unwinding panic occurs in a UDF (user-defined function).
-    UnwindingPanic,
-
-    /// An error returned when
-    /// [`Context::get_aux`](crate::functions::Context::get_aux) attempts to
-    /// retrieve data of a different type than what had been stored using
-    /// [`Context::set_aux`](crate::functions::Context::set_aux).
-    #[cfg(feature = "functions")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "functions")))]
-    GetAuxWrongType,
-
-    /// Error when the SQL contains multiple statements.
-    MultipleStatement,
-    /// Error when the number of bound parameters does not match the number of
-    /// parameters in the query. The first `usize` is how many parameters were
-    /// given, the 2nd is how many were expected.
-    InvalidParameterCount(usize, usize),
-
-    /// Returned from various functions in the Blob IO positional API. For
-    /// example,
-    /// [`Blob::raw_read_at_exact`](crate::blob::Blob::raw_read_at_exact) will
-    /// return it if the blob has insufficient data.
-    #[cfg(feature = "blob")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "blob")))]
-    BlobSizeError,
-    /// Error referencing a specific token in the input SQL
-    #[cfg(feature = "modern_sqlite")] // 3.38.0
-    #[cfg_attr(docsrs, doc(cfg(feature = "modern_sqlite")))]
-    SqlInputError {
-        /// error code
-        error: ffi::Error,
-        /// error message
-        msg: String,
-        /// SQL input
-        sql: String,
-        /// byte offset of the start of invalid token
-        offset: c_int,
-    },
-    /// Loadable extension initialization error
-    #[cfg(feature = "loadable_extension")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "loadable_extension")))]
-    InitError(ffi::InitError),
-    /// Error when the schema of a particular database is requested, but the index
-    /// is out of range.
-    #[cfg(feature = "modern_sqlite")] // 3.39.0
-    #[cfg_attr(docsrs, doc(cfg(feature = "modern_sqlite")))]
-    InvalidDatabaseIndex(usize),
+pub enum ErrorCode {
+    /// Internal logic error in SQLite
+    InternalMalfunction,
+    /// Access permission denied
+    PermissionDenied,
+    /// Callback routine requested an abort
+    OperationAborted,
+    /// The database file is locked
+    DatabaseBusy,
+    /// A table in the database is locked
+    DatabaseLocked,
+    /// A `malloc()` failed
+    OutOfMemory,
+    /// Attempt to write a readonly database
+    ReadOnly,
+    /// Operation terminated by `sqlite3_interrupt()`
+    OperationInterrupted,
+    /// Some kind of disk I/O error occurred
+    SystemIoFailure,
+    /// The database disk image is malformed
+    DatabaseCorrupt,
+    /// Unknown opcode in `sqlite3_file_control()`
+    NotFound,
+    /// Insertion failed because database is full
+    DiskFull,
+    /// Unable to open the database file
+    CannotOpen,
+    /// Database lock protocol error
+    FileLockingProtocolFailed,
+    /// The database schema changed
+    SchemaChanged,
+    /// String or BLOB exceeds size limit
+    TooBig,
+    /// Abort due to constraint violation
+    ConstraintViolation,
+    /// Data type mismatch
+    TypeMismatch,
+    /// Library used incorrectly
+    ApiMisuse,
+    /// Uses OS features not supported on host
+    NoLargeFileSupport,
+    /// Authorization denied
+    AuthorizationForStatementDenied,
+    /// 2nd parameter to `sqlite3_bind` out of range
+    ParameterOutOfRange,
+    /// File opened that is not a database file
+    NotADatabase,
+    /// SQL error or missing database
+    Unknown,
 }
 
-impl PartialEq for Error {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::SqliteFailure(e1, s1), Self::SqliteFailure(e2, s2)) => e1 == e2 && s1 == s2,
-            (Self::SqliteSingleThreadedMode, Self::SqliteSingleThreadedMode) => true,
-            (Self::IntegralValueOutOfRange(i1, n1), Self::IntegralValueOutOfRange(i2, n2)) => {
-                i1 == i2 && n1 == n2
-            }
-            (Self::Utf8Error(e1), Self::Utf8Error(e2)) => e1 == e2,
-            (Self::NulError(e1), Self::NulError(e2)) => e1 == e2,
-            (Self::InvalidParameterName(n1), Self::InvalidParameterName(n2)) => n1 == n2,
-            (Self::InvalidPath(p1), Self::InvalidPath(p2)) => p1 == p2,
-            (Self::ExecuteReturnedResults, Self::ExecuteReturnedResults) => true,
-            (Self::QueryReturnedNoRows, Self::QueryReturnedNoRows) => true,
-            (Self::InvalidColumnIndex(i1), Self::InvalidColumnIndex(i2)) => i1 == i2,
-            (Self::InvalidColumnName(n1), Self::InvalidColumnName(n2)) => n1 == n2,
-            (Self::InvalidColumnType(i1, n1, t1), Self::InvalidColumnType(i2, n2, t2)) => {
-                i1 == i2 && t1 == t2 && n1 == n2
-            }
-            (Self::StatementChangedRows(n1), Self::StatementChangedRows(n2)) => n1 == n2,
-            #[cfg(feature = "functions")]
-            (
-                Self::InvalidFunctionParameterType(i1, t1),
-                Self::InvalidFunctionParameterType(i2, t2),
-            ) => i1 == i2 && t1 == t2,
-            #[cfg(feature = "vtab")]
-            (
-                Self::InvalidFilterParameterType(i1, t1),
-                Self::InvalidFilterParameterType(i2, t2),
-            ) => i1 == i2 && t1 == t2,
-            (Self::InvalidQuery, Self::InvalidQuery) => true,
-            #[cfg(feature = "vtab")]
-            (Self::ModuleError(s1), Self::ModuleError(s2)) => s1 == s2,
-            (Self::UnwindingPanic, Self::UnwindingPanic) => true,
-            #[cfg(feature = "functions")]
-            (Self::GetAuxWrongType, Self::GetAuxWrongType) => true,
-            (Self::InvalidParameterCount(i1, n1), Self::InvalidParameterCount(i2, n2)) => {
-                i1 == i2 && n1 == n2
-            }
-            #[cfg(feature = "blob")]
-            (Self::BlobSizeError, Self::BlobSizeError) => true,
-            #[cfg(feature = "modern_sqlite")]
-            (
-                Self::SqlInputError {
-                    error: e1,
-                    msg: m1,
-                    sql: s1,
-                    offset: o1,
-                },
-                Self::SqlInputError {
-                    error: e2,
-                    msg: m2,
-                    sql: s2,
-                    offset: o2,
-                },
-            ) => e1 == e2 && m1 == m2 && s1 == s2 && o1 == o2,
-            #[cfg(feature = "loadable_extension")]
-            (Self::InitError(e1), Self::InitError(e2)) => e1 == e2,
-            #[cfg(feature = "modern_sqlite")]
-            (Self::InvalidDatabaseIndex(i1), Self::InvalidDatabaseIndex(i2)) => i1 == i2,
-            (..) => false,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Error {
+    pub code: ErrorCode,
+    pub extended_code: c_int,
+}
+
+impl Error {
+    #[must_use]
+    pub fn new(result_code: c_int) -> Self {
+        let code = match result_code & 0xff {
+            super::SQLITE_INTERNAL => ErrorCode::InternalMalfunction,
+            super::SQLITE_PERM => ErrorCode::PermissionDenied,
+            super::SQLITE_ABORT => ErrorCode::OperationAborted,
+            super::SQLITE_BUSY => ErrorCode::DatabaseBusy,
+            super::SQLITE_LOCKED => ErrorCode::DatabaseLocked,
+            super::SQLITE_NOMEM => ErrorCode::OutOfMemory,
+            super::SQLITE_READONLY => ErrorCode::ReadOnly,
+            super::SQLITE_INTERRUPT => ErrorCode::OperationInterrupted,
+            super::SQLITE_IOERR => ErrorCode::SystemIoFailure,
+            super::SQLITE_CORRUPT => ErrorCode::DatabaseCorrupt,
+            super::SQLITE_NOTFOUND => ErrorCode::NotFound,
+            super::SQLITE_FULL => ErrorCode::DiskFull,
+            super::SQLITE_CANTOPEN => ErrorCode::CannotOpen,
+            super::SQLITE_PROTOCOL => ErrorCode::FileLockingProtocolFailed,
+            super::SQLITE_SCHEMA => ErrorCode::SchemaChanged,
+            super::SQLITE_TOOBIG => ErrorCode::TooBig,
+            super::SQLITE_CONSTRAINT => ErrorCode::ConstraintViolation,
+            super::SQLITE_MISMATCH => ErrorCode::TypeMismatch,
+            super::SQLITE_MISUSE => ErrorCode::ApiMisuse,
+            super::SQLITE_NOLFS => ErrorCode::NoLargeFileSupport,
+            super::SQLITE_AUTH => ErrorCode::AuthorizationForStatementDenied,
+            super::SQLITE_RANGE => ErrorCode::ParameterOutOfRange,
+            super::SQLITE_NOTADB => ErrorCode::NotADatabase,
+            _ => ErrorCode::Unknown,
+        };
+
+        Self {
+            code,
+            extended_code: result_code,
         }
-    }
-}
-
-impl From<str::Utf8Error> for Error {
-    #[cold]
-    fn from(err: str::Utf8Error) -> Self {
-        Self::Utf8Error(err)
-    }
-}
-
-impl From<std::ffi::NulError> for Error {
-    #[cold]
-    fn from(err: std::ffi::NulError) -> Self {
-        Self::NulError(err)
-    }
-}
-
-const UNKNOWN_COLUMN: usize = usize::MAX;
-
-/// The conversion isn't precise, but it's convenient to have it
-/// to allow use of `get_raw(…).as_…()?` in callbacks that take `Error`.
-impl From<FromSqlError> for Error {
-    #[cold]
-    fn from(err: FromSqlError) -> Self {
-        // The error type requires index and type fields, but they aren't known in this
-        // context.
-        match err {
-            FromSqlError::OutOfRange(val) => Self::IntegralValueOutOfRange(UNKNOWN_COLUMN, val),
-            FromSqlError::InvalidBlobSize { .. } => {
-                Self::FromSqlConversionFailure(UNKNOWN_COLUMN, Type::Blob, Box::new(err))
-            }
-            FromSqlError::Other(source) => {
-                Self::FromSqlConversionFailure(UNKNOWN_COLUMN, Type::Null, source)
-            }
-            _ => Self::FromSqlConversionFailure(UNKNOWN_COLUMN, Type::Null, Box::new(err)),
-        }
-    }
-}
-
-#[cfg(feature = "loadable_extension")]
-impl From<ffi::InitError> for Error {
-    #[cold]
-    fn from(err: ffi::InitError) -> Self {
-        Self::InitError(err)
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::SqliteFailure(ref err, None) => err.fmt(f),
-            Self::SqliteFailure(_, Some(ref s)) => write!(f, "{s}"),
-            Self::SqliteSingleThreadedMode => write!(
-                f,
-                "SQLite was compiled or configured for single-threaded use only"
-            ),
-            Self::FromSqlConversionFailure(i, ref t, ref err) => {
-                if i != UNKNOWN_COLUMN {
-                    write!(f, "Conversion error from type {t} at index: {i}, {err}")
-                } else {
-                    err.fmt(f)
-                }
-            }
-            Self::IntegralValueOutOfRange(col, val) => {
-                if col != UNKNOWN_COLUMN {
-                    write!(f, "Integer {val} out of range at index {col}")
-                } else {
-                    write!(f, "Integer {val} out of range")
-                }
-            }
-            Self::Utf8Error(ref err) => err.fmt(f),
-            Self::NulError(ref err) => err.fmt(f),
-            Self::InvalidParameterName(ref name) => write!(f, "Invalid parameter name: {name}"),
-            Self::InvalidPath(ref p) => write!(f, "Invalid path: {}", p.to_string_lossy()),
-            Self::ExecuteReturnedResults => {
-                write!(f, "Execute returned results - did you mean to call query?")
-            }
-            Self::QueryReturnedNoRows => write!(f, "Query returned no rows"),
-            Self::InvalidColumnIndex(i) => write!(f, "Invalid column index: {i}"),
-            Self::InvalidColumnName(ref name) => write!(f, "Invalid column name: {name}"),
-            Self::InvalidColumnType(i, ref name, ref t) => {
-                write!(f, "Invalid column type {t} at index: {i}, name: {name}")
-            }
-            Self::InvalidParameterCount(i1, n1) => write!(
-                f,
-                "Wrong number of parameters passed to query. Got {i1}, needed {n1}"
-            ),
-            Self::StatementChangedRows(i) => write!(f, "Query changed {i} rows"),
-
-            #[cfg(feature = "functions")]
-            Self::InvalidFunctionParameterType(i, ref t) => {
-                write!(f, "Invalid function parameter type {t} at index {i}")
-            }
-            #[cfg(feature = "vtab")]
-            Self::InvalidFilterParameterType(i, ref t) => {
-                write!(f, "Invalid filter parameter type {t} at index {i}")
-            }
-            #[cfg(feature = "functions")]
-            Self::UserFunctionError(ref err) => err.fmt(f),
-            Self::ToSqlConversionFailure(ref err) => err.fmt(f),
-            Self::InvalidQuery => write!(f, "Query is not read-only"),
-            #[cfg(feature = "vtab")]
-            Self::ModuleError(ref desc) => write!(f, "{desc}"),
-            Self::UnwindingPanic => write!(f, "unwinding panic"),
-            #[cfg(feature = "functions")]
-            Self::GetAuxWrongType => write!(f, "get_aux called with wrong type"),
-            Self::MultipleStatement => write!(f, "Multiple statements provided"),
-            #[cfg(feature = "blob")]
-            Self::BlobSizeError => "Blob size is insufficient".fmt(f),
-            #[cfg(feature = "modern_sqlite")]
-            Self::SqlInputError {
-                ref msg,
-                offset,
-                ref sql,
-                ..
-            } => write!(f, "{msg} in {sql} at offset {offset}"),
-            #[cfg(feature = "loadable_extension")]
-            Self::InitError(ref err) => err.fmt(f),
-            #[cfg(feature = "modern_sqlite")]
-            Self::InvalidDatabaseIndex(i) => write!(f, "Invalid database index: {i}"),
-        }
+        write!(
+            f,
+            "Error code {}: {}",
+            self.extended_code,
+            code_to_str(self.extended_code)
+        )
     }
 }
 
 impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+    fn description(&self) -> &str {
+        code_to_str(self.extended_code)
+    }
+}
+
+// Result codes.
+// Note: These are not public because our bindgen bindings export whichever
+// constants are present in the current version of SQLite. We repeat them here,
+// so we don't have to worry about which version of SQLite added which
+// constants, and we only use them to implement code_to_str below.
+
+// Extended result codes.
+
+const SQLITE_ERROR_MISSING_COLLSEQ: c_int = super::SQLITE_ERROR | (1 << 8);
+const SQLITE_ERROR_RETRY: c_int = super::SQLITE_ERROR | (2 << 8);
+const SQLITE_ERROR_SNAPSHOT: c_int = super::SQLITE_ERROR | (3 << 8);
+
+const SQLITE_IOERR_BEGIN_ATOMIC: c_int = super::SQLITE_IOERR | (29 << 8);
+const SQLITE_IOERR_COMMIT_ATOMIC: c_int = super::SQLITE_IOERR | (30 << 8);
+const SQLITE_IOERR_ROLLBACK_ATOMIC: c_int = super::SQLITE_IOERR | (31 << 8);
+const SQLITE_IOERR_DATA: c_int = super::SQLITE_IOERR | (32 << 8);
+const SQLITE_IOERR_CORRUPTFS: c_int = super::SQLITE_IOERR | (33 << 8);
+const SQLITE_IOERR_IN_PAGE: c_int = super::SQLITE_IOERR | (34 << 8);
+
+const SQLITE_LOCKED_VTAB: c_int = super::SQLITE_LOCKED | (2 << 8);
+
+const SQLITE_BUSY_TIMEOUT: c_int = super::SQLITE_BUSY | (3 << 8);
+
+const SQLITE_CANTOPEN_SYMLINK: c_int = super::SQLITE_CANTOPEN | (6 << 8);
+
+const SQLITE_CORRUPT_SEQUENCE: c_int = super::SQLITE_CORRUPT | (2 << 8);
+const SQLITE_CORRUPT_INDEX: c_int = super::SQLITE_CORRUPT | (3 << 8);
+
+const SQLITE_READONLY_CANTINIT: c_int = super::SQLITE_READONLY | (5 << 8);
+const SQLITE_READONLY_DIRECTORY: c_int = super::SQLITE_READONLY | (6 << 8);
+
+const SQLITE_CONSTRAINT_PINNED: c_int = super::SQLITE_CONSTRAINT | (11 << 8);
+const SQLITE_CONSTRAINT_DATATYPE: c_int = super::SQLITE_CONSTRAINT | (12 << 8);
+
+#[must_use]
+pub fn code_to_str(code: c_int) -> &'static str {
+    match code {
+        super::SQLITE_OK        => "Successful result",
+        super::SQLITE_ERROR     => "SQL error or missing database",
+        super::SQLITE_INTERNAL  => "Internal logic error in SQLite",
+        super::SQLITE_PERM      => "Access permission denied",
+        super::SQLITE_ABORT     => "Callback routine requested an abort",
+        super::SQLITE_BUSY      => "The database file is locked",
+        super::SQLITE_LOCKED    => "A table in the database is locked",
+        super::SQLITE_NOMEM     => "A malloc() failed",
+        super::SQLITE_READONLY  => "Attempt to write a readonly database",
+        super::SQLITE_INTERRUPT => "Operation terminated by sqlite3_interrupt()",
+        super::SQLITE_IOERR     => "Some kind of disk I/O error occurred",
+        super::SQLITE_CORRUPT   => "The database disk image is malformed",
+        super::SQLITE_NOTFOUND  => "Unknown opcode in sqlite3_file_control()",
+        super::SQLITE_FULL      => "Insertion failed because database is full",
+        super::SQLITE_CANTOPEN  => "Unable to open the database file",
+        super::SQLITE_PROTOCOL  => "Database lock protocol error",
+        super::SQLITE_EMPTY     => "Database is empty",
+        super::SQLITE_SCHEMA    => "The database schema changed",
+        super::SQLITE_TOOBIG    => "String or BLOB exceeds size limit",
+        super::SQLITE_CONSTRAINT=> "Abort due to constraint violation",
+        super::SQLITE_MISMATCH  => "Data type mismatch",
+        super::SQLITE_MISUSE    => "Library used incorrectly",
+        super::SQLITE_NOLFS     => "Uses OS features not supported on host",
+        super::SQLITE_AUTH      => "Authorization denied",
+        super::SQLITE_FORMAT    => "Auxiliary database format error",
+        super::SQLITE_RANGE     => "2nd parameter to sqlite3_bind out of range",
+        super::SQLITE_NOTADB    => "File opened that is not a database file",
+        super::SQLITE_NOTICE    => "Notifications from sqlite3_log()",
+        super::SQLITE_WARNING   => "Warnings from sqlite3_log()",
+        super::SQLITE_ROW       => "sqlite3_step() has another row ready",
+        super::SQLITE_DONE      => "sqlite3_step() has finished executing",
+
+        SQLITE_ERROR_MISSING_COLLSEQ   => "SQLITE_ERROR_MISSING_COLLSEQ",
+        SQLITE_ERROR_RETRY   => "SQLITE_ERROR_RETRY",
+        SQLITE_ERROR_SNAPSHOT   => "SQLITE_ERROR_SNAPSHOT",
+
+        super::SQLITE_IOERR_READ              => "Error reading from disk",
+        super::SQLITE_IOERR_SHORT_READ        => "Unable to obtain number of requested bytes (file truncated?)",
+        super::SQLITE_IOERR_WRITE             => "Error writing to disk",
+        super::SQLITE_IOERR_FSYNC             => "Error flushing data to persistent storage (fsync)",
+        super::SQLITE_IOERR_DIR_FSYNC         => "Error calling fsync on a directory",
+        super::SQLITE_IOERR_TRUNCATE          => "Error attempting to truncate file",
+        super::SQLITE_IOERR_FSTAT             => "Error invoking fstat to get file metadata",
+        super::SQLITE_IOERR_UNLOCK            => "I/O error within xUnlock of a VFS object",
+        super::SQLITE_IOERR_RDLOCK            => "I/O error within xLock of a VFS object (trying to obtain a read lock)",
+        super::SQLITE_IOERR_DELETE            => "I/O error within xDelete of a VFS object",
+        super::SQLITE_IOERR_BLOCKED           => "SQLITE_IOERR_BLOCKED", // no longer used
+        super::SQLITE_IOERR_NOMEM             => "Out of memory in I/O layer",
+        super::SQLITE_IOERR_ACCESS            => "I/O error within xAccess of a VFS object",
+        super::SQLITE_IOERR_CHECKRESERVEDLOCK => "I/O error within then xCheckReservedLock method",
+        super::SQLITE_IOERR_LOCK              => "I/O error in the advisory file locking layer",
+        super::SQLITE_IOERR_CLOSE             => "I/O error within the xClose method",
+        super::SQLITE_IOERR_DIR_CLOSE         => "SQLITE_IOERR_DIR_CLOSE", // no longer used
+        super::SQLITE_IOERR_SHMOPEN           => "I/O error within the xShmMap method (trying to open a new shared-memory segment)",
+        super::SQLITE_IOERR_SHMSIZE           => "I/O error within the xShmMap method (trying to resize an existing shared-memory segment)",
+        super::SQLITE_IOERR_SHMLOCK           => "SQLITE_IOERR_SHMLOCK", // no longer used
+        super::SQLITE_IOERR_SHMMAP            => "I/O error within the xShmMap method (trying to map a shared-memory segment into process address space)",
+        super::SQLITE_IOERR_SEEK              => "I/O error within the xRead or xWrite (trying to seek within a file)",
+        super::SQLITE_IOERR_DELETE_NOENT      => "File being deleted does not exist",
+        super::SQLITE_IOERR_MMAP              => "I/O error while trying to map or unmap part of the database file into process address space",
+        super::SQLITE_IOERR_GETTEMPPATH       => "VFS is unable to determine a suitable directory for temporary files",
+        super::SQLITE_IOERR_CONVPATH          => "cygwin_conv_path() system call failed",
+        super::SQLITE_IOERR_VNODE             => "SQLITE_IOERR_VNODE", // not documented?
+        super::SQLITE_IOERR_AUTH              => "SQLITE_IOERR_AUTH",
+        SQLITE_IOERR_BEGIN_ATOMIC      => "SQLITE_IOERR_BEGIN_ATOMIC",
+        SQLITE_IOERR_COMMIT_ATOMIC     => "SQLITE_IOERR_COMMIT_ATOMIC",
+        SQLITE_IOERR_ROLLBACK_ATOMIC   => "SQLITE_IOERR_ROLLBACK_ATOMIC",
+        SQLITE_IOERR_DATA   => "SQLITE_IOERR_DATA",
+        SQLITE_IOERR_CORRUPTFS   => "SQLITE_IOERR_CORRUPTFS",
+        SQLITE_IOERR_IN_PAGE   => "SQLITE_IOERR_IN_PAGE",
+
+        super::SQLITE_LOCKED_SHAREDCACHE      => "Locking conflict due to another connection with a shared cache",
+        SQLITE_LOCKED_VTAB             => "SQLITE_LOCKED_VTAB",
+
+        super::SQLITE_BUSY_RECOVERY           => "Another process is recovering a WAL mode database file",
+        super::SQLITE_BUSY_SNAPSHOT           => "Cannot promote read transaction to write transaction because of writes by another connection",
+        SQLITE_BUSY_TIMEOUT           => "SQLITE_BUSY_TIMEOUT",
+
+        super::SQLITE_CANTOPEN_NOTEMPDIR      => "SQLITE_CANTOPEN_NOTEMPDIR", // no longer used
+        super::SQLITE_CANTOPEN_ISDIR          => "Attempted to open directory as file",
+        super::SQLITE_CANTOPEN_FULLPATH       => "Unable to convert filename into full pathname",
+        super::SQLITE_CANTOPEN_CONVPATH       => "cygwin_conv_path() system call failed",
+        SQLITE_CANTOPEN_SYMLINK       => "SQLITE_CANTOPEN_SYMLINK",
+
+        super::SQLITE_CORRUPT_VTAB            => "Content in the virtual table is corrupt",
+        SQLITE_CORRUPT_SEQUENCE        => "SQLITE_CORRUPT_SEQUENCE",
+        SQLITE_CORRUPT_INDEX        => "SQLITE_CORRUPT_INDEX",
+
+        super::SQLITE_READONLY_RECOVERY       => "WAL mode database file needs recovery (requires write access)",
+        super::SQLITE_READONLY_CANTLOCK       => "Shared-memory file associated with WAL mode database is read-only",
+        super::SQLITE_READONLY_ROLLBACK       => "Database has hot journal that must be rolled back (requires write access)",
+        super::SQLITE_READONLY_DBMOVED        => "Database cannot be modified because database file has moved",
+        SQLITE_READONLY_CANTINIT       => "SQLITE_READONLY_CANTINIT",
+        SQLITE_READONLY_DIRECTORY      => "SQLITE_READONLY_DIRECTORY",
+
+        super::SQLITE_ABORT_ROLLBACK          => "Transaction was rolled back",
+
+        super::SQLITE_CONSTRAINT_CHECK        => "A CHECK constraint failed",
+        super::SQLITE_CONSTRAINT_COMMITHOOK   => "Commit hook caused rollback",
+        super::SQLITE_CONSTRAINT_FOREIGNKEY   => "Foreign key constraint failed",
+        super::SQLITE_CONSTRAINT_FUNCTION     => "Error returned from extension function",
+        super::SQLITE_CONSTRAINT_NOTNULL      => "A NOT NULL constraint failed",
+        super::SQLITE_CONSTRAINT_PRIMARYKEY   => "A PRIMARY KEY constraint failed",
+        super::SQLITE_CONSTRAINT_TRIGGER      => "A RAISE function within a trigger fired",
+        super::SQLITE_CONSTRAINT_UNIQUE       => "A UNIQUE constraint failed",
+        super::SQLITE_CONSTRAINT_VTAB         => "An application-defined virtual table error occurred",
+        super::SQLITE_CONSTRAINT_ROWID        => "A non-unique rowid occurred",
+        SQLITE_CONSTRAINT_PINNED        => "SQLITE_CONSTRAINT_PINNED",
+        SQLITE_CONSTRAINT_DATATYPE        => "SQLITE_CONSTRAINT_DATATYPE",
+
+        super::SQLITE_NOTICE_RECOVER_WAL      => "A WAL mode database file was recovered",
+        super::SQLITE_NOTICE_RECOVER_ROLLBACK => "Hot journal was rolled back",
+
+        super::SQLITE_WARNING_AUTOINDEX       => "Automatic indexing used - database might benefit from additional indexes",
+
+        super::SQLITE_AUTH_USER               => "SQLITE_AUTH_USER", // not documented?
+
+        _ => "Unknown error code",
+    }
+}
+
+/// Loadable extension initialization error
+#[cfg(feature = "loadable_extension")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum InitError {
+    /// Version mismatch between the extension and the SQLite3 library
+    VersionMismatch { compile_time: i32, runtime: i32 },
+    /// Invalid function pointer in one of `sqlite3_api_routines` fields
+    NullFunctionPointer,
+}
+#[cfg(feature = "loadable_extension")]
+impl fmt::Display for InitError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Self::SqliteFailure(ref err, _) => Some(err),
-            Self::Utf8Error(ref err) => Some(err),
-            Self::NulError(ref err) => Some(err),
-
-            Self::IntegralValueOutOfRange(..)
-            | Self::SqliteSingleThreadedMode
-            | Self::InvalidParameterName(_)
-            | Self::ExecuteReturnedResults
-            | Self::QueryReturnedNoRows
-            | Self::InvalidColumnIndex(_)
-            | Self::InvalidColumnName(_)
-            | Self::InvalidColumnType(..)
-            | Self::InvalidPath(_)
-            | Self::InvalidParameterCount(..)
-            | Self::StatementChangedRows(_)
-            | Self::InvalidQuery
-            | Self::MultipleStatement => None,
-
-            #[cfg(feature = "functions")]
-            Self::InvalidFunctionParameterType(..) => None,
-            #[cfg(feature = "vtab")]
-            Self::InvalidFilterParameterType(..) => None,
-
-            #[cfg(feature = "functions")]
-            Self::UserFunctionError(ref err) => Some(&**err),
-
-            Self::FromSqlConversionFailure(_, _, ref err)
-            | Self::ToSqlConversionFailure(ref err) => Some(&**err),
-
-            #[cfg(feature = "vtab")]
-            Self::ModuleError(_) => None,
-
-            Self::UnwindingPanic => None,
-
-            #[cfg(feature = "functions")]
-            Self::GetAuxWrongType => None,
-
-            #[cfg(feature = "blob")]
-            Self::BlobSizeError => None,
-            #[cfg(feature = "modern_sqlite")]
-            Self::SqlInputError { ref error, .. } => Some(error),
-            #[cfg(feature = "loadable_extension")]
-            Self::InitError(ref err) => Some(err),
-            #[cfg(feature = "modern_sqlite")]
-            Self::InvalidDatabaseIndex(_) => None,
-        }
-    }
-}
-
-impl Error {
-    /// Returns the underlying SQLite error if this is [`Error::SqliteFailure`].
-    #[inline]
-    #[must_use]
-    pub fn sqlite_error(&self) -> Option<&ffi::Error> {
-        match self {
-            Self::SqliteFailure(error, _) => Some(error),
-            _ => None,
-        }
-    }
-
-    /// Returns the underlying SQLite error code if this is
-    /// [`Error::SqliteFailure`].
-    #[inline]
-    #[must_use]
-    pub fn sqlite_error_code(&self) -> Option<ffi::ErrorCode> {
-        self.sqlite_error().map(|error| error.code)
-    }
-}
-
-// These are public but not re-exported by lib.rs, so only visible within crate.
-
-#[cold]
-pub fn error_from_sqlite_code(code: c_int, message: Option<String>) -> Error {
-    Error::SqliteFailure(ffi::Error::new(code), message)
-}
-
-#[cold]
-pub unsafe fn error_from_handle(db: *mut ffi::sqlite3, code: c_int) -> Error {
-    let message = if db.is_null() {
-        None
-    } else {
-        Some(errmsg_to_string(ffi::sqlite3_errmsg(db)))
-    };
-    error_from_sqlite_code(code, message)
-}
-
-pub unsafe fn decode_result_raw(db: *mut ffi::sqlite3, code: c_int) -> Result<()> {
-    if code == ffi::SQLITE_OK {
-        Ok(())
-    } else {
-        Err(error_from_handle(db, code))
-    }
-}
-
-#[cold]
-#[cfg(not(feature = "modern_sqlite"))] // SQLite >= 3.38.0
-pub unsafe fn error_with_offset(db: *mut ffi::sqlite3, code: c_int, _sql: &str) -> Error {
-    error_from_handle(db, code)
-}
-
-#[cold]
-#[cfg(feature = "modern_sqlite")] // SQLite >= 3.38.0
-pub unsafe fn error_with_offset(db: *mut ffi::sqlite3, code: c_int, sql: &str) -> Error {
-    if db.is_null() {
-        error_from_sqlite_code(code, None)
-    } else {
-        let error = ffi::Error::new(code);
-        let msg = errmsg_to_string(ffi::sqlite3_errmsg(db));
-        if ffi::ErrorCode::Unknown == error.code {
-            let offset = ffi::sqlite3_error_offset(db);
-            if offset >= 0 {
-                return Error::SqlInputError {
-                    error,
-                    msg,
-                    sql: sql.to_owned(),
-                    offset,
-                };
+            Self::VersionMismatch {
+                compile_time,
+                runtime,
+            } => {
+                write!(f, "SQLite version mismatch: {runtime} < {compile_time}")
+            }
+            Self::NullFunctionPointer => {
+                write!(f, "Some sqlite3_api_routines fields are null")
             }
         }
-        Error::SqliteFailure(error, Some(msg))
     }
 }
+#[cfg(feature = "loadable_extension")]
+impl error::Error for InitError {}
 
-pub fn check(code: c_int) -> Result<()> {
-    if code != ffi::SQLITE_OK {
-        Err(error_from_sqlite_code(code, None))
-    } else {
-        Ok(())
-    }
-}
+#[cfg(test)]
+mod test {
+    use crate::*;
 
-/// Transform Rust error to SQLite error (message and code).
-/// # Safety
-/// This function is unsafe because it uses raw pointer
-pub unsafe fn to_sqlite_error(e: &Error, err_msg: *mut *mut std::os::raw::c_char) -> c_int {
-    use crate::util::alloc;
-    match e {
-        Error::SqliteFailure(err, s) => {
-            if let Some(s) = s {
-                *err_msg = alloc(s);
-            }
-            err.extended_code
-        }
-        err => {
-            *err_msg = alloc(&err.to_string());
-            ffi::SQLITE_ERROR
+    #[test]
+    pub fn error_new() {
+        let assoc = vec![
+            (SQLITE_INTERNAL, ErrorCode::InternalMalfunction),
+            (SQLITE_PERM, ErrorCode::PermissionDenied),
+            (SQLITE_ABORT_ROLLBACK, ErrorCode::OperationAborted),
+            (SQLITE_BUSY_RECOVERY, ErrorCode::DatabaseBusy),
+            (SQLITE_LOCKED_SHAREDCACHE, ErrorCode::DatabaseLocked),
+            (SQLITE_NOMEM, ErrorCode::OutOfMemory),
+            (SQLITE_IOERR_READ, ErrorCode::SystemIoFailure),
+            (SQLITE_NOTFOUND, ErrorCode::NotFound),
+            (SQLITE_FULL, ErrorCode::DiskFull),
+            (SQLITE_PROTOCOL, ErrorCode::FileLockingProtocolFailed),
+            (SQLITE_SCHEMA, ErrorCode::SchemaChanged),
+            (SQLITE_TOOBIG, ErrorCode::TooBig),
+            (SQLITE_MISMATCH, ErrorCode::TypeMismatch),
+            (SQLITE_NOLFS, ErrorCode::NoLargeFileSupport),
+            (SQLITE_RANGE, ErrorCode::ParameterOutOfRange),
+            (SQLITE_NOTADB, ErrorCode::NotADatabase),
+        ];
+        for (sqlite_code, rust_code) in assoc {
+            let err = Error::new(sqlite_code);
+            assert_eq!(
+                err,
+                Error {
+                    code: rust_code,
+                    extended_code: sqlite_code
+                }
+            );
+            let s = format!("{err}");
+            assert!(!s.is_empty());
         }
     }
 }

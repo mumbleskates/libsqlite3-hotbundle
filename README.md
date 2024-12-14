@@ -1,4 +1,14 @@
-# Rusqlite
+# libsqlite3-hotbundle
+
+A fork of `libsqlite3-sys` that bundles a more recent version of sqlite3.
+
+## Usage
+
+In your Cargo.toml:
+
+```toml
+libsqlite3-sys = { package = "libsqlite3-hotbundle", version = "1.470200" }
+```
 
 [![Latest Version](https://img.shields.io/crates/v/rusqlite.svg)](https://crates.io/crates/rusqlite)
 [![Documentation](https://docs.rs/rusqlite/badge.svg)](https://docs.rs/rusqlite)
@@ -11,10 +21,6 @@
 Rusqlite is an ergonomic wrapper for using SQLite from Rust.
 
 Historically, the API was based on the one from [`rust-postgres`](https://github.com/sfackler/rust-postgres). However, the two have diverged in many ways, and no compatibility between the two is intended.
-
-## Usage
-
-In your Cargo.toml:
 
 ```toml
 [dependencies]
