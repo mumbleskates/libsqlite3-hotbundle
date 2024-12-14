@@ -26,3 +26,6 @@ with-asan = []
 
 [build-dependencies]
 cc = { version = "1.2.4" }
+
+[dev-dependencies]
+rusqlite = "0.32.1"
