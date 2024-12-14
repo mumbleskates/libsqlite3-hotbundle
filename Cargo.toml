@@ -9,17 +9,20 @@ edition = "2021"
 repository = "https://github.com/mumbleskates/libsqlite3-hotbundle"
 description = "bundled libsqlite3 library"
 license = "MIT"
-links = "sqlite3"
 build = "build.rs"
 keywords = ["sqlite", "ffi"]
 
 [features]
 default = []
+
+# sqlite library features
 double-quoted-string-literals = []
+preupdate_hook = []
 unlock_notify = []
 session = []
-with-asan = []
+# more build options
 wasm32-wasi-vfs = []
+with-asan = []
 
 [build-dependencies]
 cc = { version = "1.2.4" }
