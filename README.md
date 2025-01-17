@@ -11,6 +11,12 @@ then be chosen instead of the system's sqlite3 library or the version of the
 sqlite3 library that `libsqlite3-sys` would have bundled.
 
 ```toml
-libsqlite3-hotbundle = "1.470200"
+libsqlite3-hotbundle = "1.480000"
 rusqlite = "0.32"
 ```
+
+## Versioning
+
+This crate uses the sqlite release bundle versioning, which is a big number that
+is the whole sqlite3 library version strung together. A sqlite3 release numbered
+"3.45.6" would be numbered 3450600, which would become 1.450600.0 in this crate.
