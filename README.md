@@ -12,7 +12,7 @@ sqlite3 library that `libsqlite3-sys` would have bundled.
 
 ```toml
 libsqlite3-hotbundle = "1.530000"
-rusqlite = "0.38"
+rusqlite = "0.39"
 ```
 
 ## Versioning
