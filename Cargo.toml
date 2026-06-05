@@ -28,4 +28,4 @@ with-asan = []
 cc = { version = "1.2.27" }
 
 [dev-dependencies]
-rusqlite = "0.39.0"
+rusqlite = "0.40.0"
